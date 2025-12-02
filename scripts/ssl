@@ -295,7 +295,7 @@ function initDefaultArgs()
     NO_CAPS=$(echo ${NO_STRING}|tr [:lower:] [:upper:])
     DATABASE_NAME="magento"_"$(date +%s)"
 
-    NGINX_SITES_CONF_D="$(pwd)/conf/nginx/conf.d"
+    NGINX_SITES_CONF_D="$(pwd)/conf/nginx/available.d"
     NGINX_SITES_CONF_D_SSL_FILE="${NGINX_SITES_CONF_D}/${VHOST_DOMAIN}-ssl.conf"
 }
 
@@ -308,12 +308,18 @@ function checkSslCommand()
 {
     if ! command_exists mkcert; then
         _error "Missing mkcert command"
-        _warning "You need to install mkcert with this command below if you are using Ubuntu:"
-        echo -n "    sudo apt-get install libnss3-tools -y
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            _warning "You need to install mkcert using Homebrew on macOS:"
+            echo "    brew install mkcert"
+            echo "    mkcert -install"
+        else
+            _warning "You need to install mkcert with this command below if you are using Ubuntu:"
+            echo -n "    sudo apt-get install libnss3-tools -y
     sudo wget https://github.com/FiloSottile/mkcert/releases/download/v1.4.3/mkcert-v1.4.3-linux-amd64 -O /usr/local/bin/mkcert
     sudo chmod +x /usr/local/bin/mkcert
     mkcert -install
 "
+        fi
         exit 1
     fi
 }
@@ -427,7 +433,7 @@ function main()
     checkDomainExist
     createCertificate
     prepareSslVhostContent
-    reloadNginx
+    $(pwd)/scripts/site start $VHOST_DOMAIN
 
     printSuccessMessage
     exit 0

@@ -7,7 +7,7 @@ COMMON_SERVICES = nginx mysql mailhog elasticsearch redis
 SERVICES_81C2 = $(COMMON_SERVICES) php81-c2
 SERVICES_82   = $(COMMON_SERVICES) php82
 SERVICES_83   = $(COMMON_SERVICES) php83
-SERVICES   = $(COMMON_SERVICES) php81-c2 php83 php82 
+SERVICES   = $(COMMON_SERVICES) php82
 
 .PHONY: up81-c2 up82 up83 up84 down ps logs restart81-c2 restart82 restart83 bash plato hanleys npm-run-watch
 
@@ -60,3 +60,13 @@ npm-run-watch:
 	@$(MAKE) bash V=82 D=plato
 	cd app/design/frontend/Webqem/myplates/web/tailwind
 	npm run watch
+
+# ======= SITE MANAGEMENT =======
+site-start:
+	./scripts/site start $(DOMAIN)
+
+site-stop:
+	./scripts/site stop $(DOMAIN)
+
+site-list:
+	./scripts/site list

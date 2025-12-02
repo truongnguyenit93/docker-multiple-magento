@@ -313,12 +313,12 @@ function validateArgs()
         _error "--domain=... parameter is missing."
         ERROR_COUNT=$((ERROR_COUNT + 1))
     fi
-    if [[ ! -z "$APP_PHP" && "$APP_PHP" != @(php70|php71|php72|php73|php74|php74-c2|php81-c2|php82|php83) ]]; then
+    if [[ ! -z "$APP_PHP" && "$APP_PHP" != @(php70|php71|php72|php73|php74|php74-c2|php81-c2|php82|php83|php84) ]]; then
         _error "Please enter valid application php --php-version=... parameter(php70|php71|php72|php73|php74|php74-c2|php81-c2|php82|php83|php84)."
         ERROR_COUNT=$((ERROR_COUNT + 1))
     fi
     if [[ -z "$MAGENTO_VERSION" ]]; then
-        _error "--mangeto-version=... parameter is missing."
+        _error "--magento-version=... parameter is missing."
         ERROR_COUNT=$((ERROR_COUNT + 1))
     fi
     if [[ -z "$APP_PHP" ]]; then
@@ -377,8 +377,8 @@ function validateMagentoVersion()
             exit 1
         fi
     elif [[ $MAGENTO_VERSION == 2.4* ]] && [[ $MAGENTO_VERSION != @(2.4.0*|2.4.1*|2.4.2*|2.4.3*) ]]; then 
-        if [[ $APP_PHP != @(php81-c2*|php82*) ]]; then
-            _error "PHP should run with PHP version 8.1 composer2 or PHP version 8.2, --php-version=php81-c2 or --php-version=php82 "
+        if [[ $APP_PHP != @(php81-c2*|php82*|php83*|php84*) ]]; then
+            _error "PHP should run with PHP version 8.1 composer2, PHP 8.2, 8.3 or 8.4"
             exit 1
         elif [[ ! $($SCRIPTS_DIR/list-services | grep elasticsearch) ]]; then
             _error "Elasticsearch service should be started, please start elasticsearch"
@@ -463,6 +463,15 @@ function installMagentoVersion()
     _arrow "Install Magento ${EDITION} version ${VERSION} for $VHOST_DOMAIN"
 
     if [[ $MAGENTO_VERSION == 2.4* ]]; then 
+        SEARCH_ENGINE="elasticsearch7"
+        SEARCH_HOST="elasticsearch"
+        
+        # Magento 2.4.7+ or PHP 8.3+ requires OpenSearch
+        if [[ $APP_PHP == @(php83*|php84*) ]] || [[ $MAGENTO_VERSION == 2.4.7* ]] || [[ $MAGENTO_VERSION == 2.4.8* ]]; then
+            SEARCH_ENGINE="opensearch"
+            SEARCH_HOST="opensearch"
+        fi
+
         docker-compose exec --user nginx ${APP_PHP} php -d memory_limit=-1 /home/public_html/${VHOST_DOMAIN}/bin/magento setup:install \
             --db-host="$MYSQL_HOST" \
             --db-name="${DATABASE_NAME}" \
@@ -476,8 +485,8 @@ function installMagentoVersion()
             --admin-password="$ADMIN_PASSWORD" \
             --backend-frontname="admin" \
             --language="en_US" \
-            --search-engine=elasticsearch7 \
-            --elasticsearch-host="elasticsearch" \
+            --search-engine="${SEARCH_ENGINE}" \
+            --elasticsearch-host="${SEARCH_HOST}" \
             --elasticsearch-port="9200" \
             --elasticsearch-index-prefix="${VHOST_DOMAIN}" \
             --currency="USD" \

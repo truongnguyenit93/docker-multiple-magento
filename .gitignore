@@ -1,0 +1,10 @@
+# Ignore everything in these directories
+sources/*
+data/*
+logs/*
+conf/nginx/*
+
+# Keep the directories themselves (optional, if you want to track empty dirs)
+!sources/.keepme
+!data/.keepme
+!logs/.keepme

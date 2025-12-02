@@ -260,7 +260,7 @@ function initDefaultArgs()
 {
     VHOST_ROOT_DIR=
     NGINX_SITES_CONF_D_FILE=
-    NGINX_SITES_CONF_D="$(pwd)/conf/nginx/conf.d"
+    NGINX_SITES_CONF_D="$(pwd)/conf/nginx/available.d"
 
     YES_STRING=$"y"
     NO_STRING=$"n"
@@ -408,7 +408,8 @@ function createVirtualHost()
     _success "Done"
 
     _arrow "Reloading the Nginx container configuration..."
-    reloadNginx
+    _arrow "Enabling site..."
+    $(pwd)/scripts/site start $VHOST_DOMAIN
     _success "Done"
 }
 

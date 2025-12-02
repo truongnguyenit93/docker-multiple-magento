@@ -6,6 +6,7 @@ services:
     hostname: nginx
     volumes:
       - ./conf/nginx/conf.d:/etc/nginx/conf.d
+      - ./conf/nginx/available.d:/etc/nginx/available.d
       - ./conf/nginx/ssl:/etc/nginx/ssl
       - ./logs/nginx:/var/log/nginx
       - ./sources:/home/public_html
@@ -318,6 +319,14 @@ services:
       - nginx
     volumes:
       - ./conf/varnish/default.vcl:/etc/varnish/default.vcl
+
+  composer:
+    build:
+      context: ./build/composer
+    volumes:
+      - ./sources:/app
+      - composer_cache:/tmp/cache
+    command: install
 
 volumes: 
   composer_cache:

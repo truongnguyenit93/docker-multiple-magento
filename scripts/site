@@ -1,0 +1,169 @@
+#!/usr/bin/env bash
+
+# Directories
+AVAILABLE_DIR="$(pwd)/conf/nginx/available.d"
+ENABLED_DIR="$(pwd)/conf/nginx/conf.d"
+
+# Colors
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+function usage() {
+    echo "Usage: $0 {start|stop|list} [domain]"
+    exit 1
+}
+
+function reload_nginx() {
+    echo "Reloading Nginx..."
+    docker-compose exec nginx nginx -s reload
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}Nginx reloaded successfully.${NC}"
+    else
+        echo -e "${RED}Failed to reload Nginx.${NC}"
+    fi
+}
+
+function start_site() {
+    DOMAIN=$1
+    if [ -z "$DOMAIN" ]; then
+        echo -e "${RED}Error: Domain name required.${NC}"
+        usage
+    fi
+
+    if [ ! -f "$AVAILABLE_DIR/$DOMAIN.conf" ]; then
+        echo -e "${RED}Error: Site $DOMAIN not found in available.d${NC}"
+        exit 1
+    fi
+
+    # Disable all other enabled sites to prevent Nginx reload errors
+    echo "Disabling other sites..."
+    for file in "$ENABLED_DIR"/*.conf; do
+        [ -e "$file" ] || continue
+        filename=$(basename "$file")
+        enabled_domain="${filename%.conf}"
+        
+        # Skip if it's the current domain or an SSL config
+        if [ "$enabled_domain" != "$DOMAIN" ] && [ "$enabled_domain" != "$DOMAIN-ssl" ]; then
+             rm "$file"
+             echo -e "${YELLOW}Disabled $enabled_domain${NC}"
+             
+             # Remove SSL config if exists
+             if [ -f "$ENABLED_DIR/$enabled_domain-ssl.conf" ]; then
+                 rm "$ENABLED_DIR/$enabled_domain-ssl.conf"
+                 echo -e "${YELLOW}Disabled $enabled_domain SSL${NC}"
+             fi
+        fi
+    done
+
+    # Extract PHP service name
+    PHP_SERVICE=$(grep -oP 'fastcgi_pass\s+\K[a-zA-Z0-9_-]+(?=:)' "$AVAILABLE_DIR/$DOMAIN.conf" 2>/dev/null | head -n 1)
+    
+    if [ -z "$PHP_SERVICE" ]; then
+        # Fallback for Mac grep which might not support -P
+        PHP_SERVICE=$(grep 'fastcgi_pass' "$AVAILABLE_DIR/$DOMAIN.conf" | head -n 1 | awk '{print $2}' | cut -d: -f1)
+    fi
+
+    if [ ! -z "$PHP_SERVICE" ]; then
+        echo -e "Detected PHP service: ${GREEN}$PHP_SERVICE${NC}"
+        
+        # List of all known PHP services
+        ALL_PHP_SERVICES="php70 php71 php72 php73 php74 php74-c2 php81-c2 php82 php83 php84"
+        
+        for service in $ALL_PHP_SERVICES; do
+            if [ "$service" != "$PHP_SERVICE" ]; then
+                # Check if service is running before stopping to avoid noise
+                if docker-compose ps -q $service > /dev/null 2>&1; then
+                    echo "Stopping $service..."
+                    docker-compose stop $service
+                fi
+            fi
+        done
+        
+        echo "Starting $PHP_SERVICE..."
+        docker-compose up -d $PHP_SERVICE
+    else
+        echo -e "${YELLOW}Warning: Could not detect PHP service for $DOMAIN${NC}"
+    fi
+
+    if [ -L "$ENABLED_DIR/$DOMAIN.conf" ]; then
+        echo -e "${YELLOW}Site $DOMAIN is already enabled.${NC}"
+        # Check for SSL config if it's missing in enabled but present in available
+        if [ -f "$AVAILABLE_DIR/$DOMAIN-ssl.conf" ] && [ ! -L "$ENABLED_DIR/$DOMAIN-ssl.conf" ]; then
+             ln -s "../available.d/$DOMAIN-ssl.conf" "$ENABLED_DIR/$DOMAIN-ssl.conf"
+             echo -e "${GREEN}SSL config for $DOMAIN enabled.${NC}"
+             reload_nginx
+        fi
+    else
+        ln -s "../available.d/$DOMAIN.conf" "$ENABLED_DIR/$DOMAIN.conf"
+        echo -e "${GREEN}Site $DOMAIN enabled.${NC}"
+        
+        # Check for SSL config
+        if [ -f "$AVAILABLE_DIR/$DOMAIN-ssl.conf" ]; then
+             ln -s "../available.d/$DOMAIN-ssl.conf" "$ENABLED_DIR/$DOMAIN-ssl.conf"
+             echo -e "${GREEN}SSL config for $DOMAIN enabled.${NC}"
+        fi
+        
+        reload_nginx
+    fi
+}
+
+function stop_site() {
+    DOMAIN=$1
+    if [ -z "$DOMAIN" ]; then
+        echo -e "${RED}Error: Domain name required.${NC}"
+        usage
+    fi
+
+    if [ -L "$ENABLED_DIR/$DOMAIN.conf" ] || [ -f "$ENABLED_DIR/$DOMAIN.conf" ]; then
+        rm "$ENABLED_DIR/$DOMAIN.conf"
+        echo -e "${GREEN}Site $DOMAIN disabled.${NC}"
+        
+        # Check for SSL config
+        if [ -L "$ENABLED_DIR/$DOMAIN-ssl.conf" ] || [ -f "$ENABLED_DIR/$DOMAIN-ssl.conf" ]; then
+             rm "$ENABLED_DIR/$DOMAIN-ssl.conf"
+             echo -e "${GREEN}SSL config for $DOMAIN disabled.${NC}"
+        fi
+
+        reload_nginx
+    else
+        echo -e "${YELLOW}Site $DOMAIN is not enabled.${NC}"
+    fi
+}
+
+function list_sites() {
+    echo "Available sites:"
+    for file in "$AVAILABLE_DIR"/*.conf; do
+        [ -e "$file" ] || continue
+        filename=$(basename "$file")
+        # Skip SSL configs in listing to avoid duplicates, or show them? 
+        # Let's show main configs.
+        if [[ "$filename" == *"-ssl.conf" ]]; then
+            continue
+        fi
+        
+        domain="${filename%.conf}"
+        
+        if [ -L "$ENABLED_DIR/$filename" ]; then
+            echo -e "  ${GREEN}[ENABLED]${NC}  $domain"
+        else
+            echo -e "  ${RED}[DISABLED]${NC} $domain"
+        fi
+    done
+}
+
+case "$1" in
+    start)
+        start_site "$2"
+        ;;
+    stop)
+        stop_site "$2"
+        ;;
+    list)
+        list_sites
+        ;;
+    *)
+        usage
+        ;;
+esac
